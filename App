@@ -1,8 +1,16 @@
+// main.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:http/http.dart' as http; // Fix: Removed the trailing single quote from 'http'
 
 void main() => runApp(const WeatherApp());
+
+// ------------------------
+// Replace these with your keys
+// ------------------------
+const String WEATHER_API_KEY = '8d3a6d33dac646d2ae065012251311';
+const String CRICKET_API_KEY = '1bf58b22-b90d-42b1-b3a7-c1abb2c08efb';
+// ------------------------
 
 class WeatherApp extends StatelessWidget {
   const WeatherApp({super.key});
@@ -10,7 +18,7 @@ class WeatherApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Weather App',
+      title: 'Weather & Sports App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
       home: const MainScreen(),
@@ -20,7 +28,6 @@ class WeatherApp extends StatelessWidget {
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
-
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
@@ -28,7 +35,6 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   String city = "Mumbai";
-  final String apiKey = "d2836b5159ed498c97164703251311";
 
   void changeCity(String newCity) {
     setState(() => city = newCity);
@@ -37,10 +43,10 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      HomeScreen(city: city, apiKey: apiKey, onCityChange: changeCity),
-      AstronomyScreen(city: city, apiKey: apiKey),
-      SportsScreen(city: city, apiKey: apiKey),
-      MarineScreen(city: city, apiKey: apiKey),
+      HomeScreen(city: city, apiKey: WEATHER_API_KEY, onCityChange: changeCity),
+      AstronomyScreen(city: city, apiKey: WEATHER_API_KEY),
+      SportsScreen(cricketApiKey: CRICKET_API_KEY),
+      MarineScreen(city: city, apiKey: WEATHER_API_KEY),
     ];
 
     return Scaffold(
@@ -59,6 +65,9 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
+// ------------------------
+// HOME SCREEN (Current + 7-day forecast)
+// ------------------------
 class HomeScreen extends StatefulWidget {
   final String city;
   final String apiKey;
@@ -91,44 +100,59 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> fetchWeather() async {
     setState(() => isLoading = true);
     try {
-      final url = "https://api.weatherapi.com/v1/forecast.json?key=${widget.apiKey}&q=${widget.city}&days=7&aqi=no";
+      final url = "https://api.weatherapi.com/v1/forecast.json?key=${widget.apiKey}&q=${widget.city}&days=7&aqi=no&alerts=no";
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
-          location = data["location"]["name"];
-          temp = data["current"]["temp_c"];
-          condition = data["current"]["condition"]["text"];
-          forecast = data["forecast"]["forecastday"];
+          location = data["location"]?["name"] as String? ?? widget.city;
+          temp = (data["current"]?["temp_c"] as num?)?.toDouble() ?? 0.0;
+          condition = data["current"]?["condition"]?["text"] as String? ?? "Clear";
+          forecast = (data["forecast"]?["forecastday"] as List<dynamic>?) ?? [];
+        });
+      } else {
+        // handle non-200
+        setState(() {
+          location = widget.city;
+          temp = 0.0;
+          condition = "Unavailable";
+          forecast = [];
         });
       }
-    // ignore: empty_catches
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("fetchWeather error: $e");
+      setState(() {
+        location = widget.city;
+        temp = 0.0;
+        condition = "Failed to load";
+        forecast = [];
+      });
+    }
     setState(() => isLoading = false);
   }
 
   String getBackground(String cond) {
-    cond = cond.toLowerCase();
-    if (cond.contains("sun")) {
-      return "https://images.unsplash.com/photo-1419833173245-f59e1b93f9ee?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-    } else if (cond.contains("cloud")) {
-      return "https://images.unsplash.com/photo-1517483000871-1dbf64a6e1c6?q=80&w=1169&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-    } else if (cond.contains("rain")) {
-      return "https://images.unsplash.com/photo-1470432581262-e7880e8fe79a?q=80&w=2072&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-    } else if (cond.contains("snow")) {
-      return "https://images.unsplash.com/photo-1483835724473-d69ca66efb25?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
+    final c = cond.toLowerCase();
+    if (c.contains('sun') || c.contains('clear')) {
+      return 'https://images.unsplash.com/photo-1419833173245-f59e1b93f9ee?auto=format&fit=crop&w=1600&q=80';
+    } else if (c.contains('cloud') || c.contains('overcast')) {
+      return 'https://images.unsplash.com/photo-1517483000871-1dbf64a6e1c6?auto=format&fit=crop&w=1600&q=80';
+    } else if (c.contains('rain') || c.contains('drizzle') || c.contains('shower')) {
+      return 'https://images.unsplash.com/photo-1470432581262-e7880e8fe79a?auto=format&fit=crop&w=1600&q=80';
+    } else if (c.contains('snow') || c.contains('sleet') || c.contains('ice')) {
+      return 'https://images.unsplash.com/photo-1483835724473-d69ca66efb25?auto=format&fit=crop&w=1600&q=80';
     } else {
-      return "https://images.unsplash.com/photo-1471899236350-e3016bf1e69e?q=80&w=1171&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
+      return 'https://images.unsplash.com/photo-1471899236350-e3016bf1e69e?auto=format&fit=crop&w=1600&q=80';
     }
   }
 
-  Future<void> changeCity() async {
+  Future<void> changeCityDialog() async {
     final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Enter City Name"),
-        content: TextField(controller: controller),
+        content: TextField(controller: controller, textInputAction: TextInputAction.done),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text("OK")),
@@ -145,55 +169,82 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(bgUrl, fit: BoxFit.cover),
+          Image.network(bgUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey)),
           Container(color: Colors.black54),
           if (isLoading)
             const Center(child: CircularProgressIndicator())
           else
-            Column(
-              children: [
-                const SizedBox(height: 80),
-                Text(location, style: const TextStyle(fontSize: 26)),
-                Text("${temp.toStringAsFixed(1)}°C", style: const TextStyle(fontSize: 70, fontWeight: FontWeight.bold)),
-                Text(condition, style: const TextStyle(fontSize: 24, color: Colors.white70)),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: changeCity,
-                  icon: const Icon(Icons.location_city),
-                  label: const Text("Change City"),
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: forecast.length,
-                    itemBuilder: (ctx, i) {
-                      final day = forecast[i];
-                      return Container(
-                        width: 120,
-                        margin: const EdgeInsets.all(8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(day["date"], style: const TextStyle(fontSize: 14, color: Colors.white70)),
-                            Image.network("https:${day["day"]["condition"]["icon"]}", width: 50),
-                            Text(day["day"]["condition"]["text"],
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 14, color: Colors.white)),
-                            Text("${day["day"]["mintemp_c"]}° / ${day["day"]["maxtemp_c"]}°",
-                                style: const TextStyle(fontSize: 16)),
-                          ],
-                        ),
-                      );
-                    },
+            SafeArea(
+              child: Column(
+                children: [
+                  const SizedBox(height: 18),
+                  Text(location, style: const TextStyle(fontSize: 26, color: Colors.white)),
+                  const SizedBox(height: 8),
+                  Text("${temp.toStringAsFixed(1)}°C", style: const TextStyle(fontSize: 68, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 6),
+                  Text(condition, style: const TextStyle(fontSize: 20, color: Colors.white70)),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: changeCityDialog,
+                    icon: const Icon(Icons.location_city),
+                    label: const Text("Change City"),
                   ),
-                )
-              ],
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("7-day forecast", style: TextStyle(fontSize: 18, color: Colors.white70)),
+                        Text("Source: WeatherAPI", style: TextStyle(fontSize: 12, color: Colors.grey[300])),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 160,
+                    child: forecast.isEmpty
+                        ? const Center(child: Text("No forecast available", style: TextStyle(color: Colors.white70)))
+                        : ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: forecast.length,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            itemBuilder: (ctx, i) {
+                              final day = forecast[i];
+                              final date = day["date"] as String? ?? "";
+                              final icon = (day["day"]?["condition"]?["icon"] as String? ?? "");
+                              final text = day["day"]?["condition"]?["text"] as String? ?? "";
+                              final min = day["day"]?["mintemp_c"] ?? 0;
+                              final max = day["day"]?["maxtemp_c"] ?? 0;
+
+                              return Container(
+                                width: 130,
+                                margin: const EdgeInsets.only(right: 12),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(12)),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(date, style: const TextStyle(color: Colors.white70)),
+                                    const SizedBox(height: 6),
+                                    Image.network(
+                                      "https:$icon",
+                                      width: 48,
+                                      height: 48,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                                    const SizedBox(height: 6),
+                                    Text("$min° / $max°", style: const TextStyle(color: Colors.white70)),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
             ),
         ],
       ),
@@ -201,6 +252,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// ------------------------
+// ASTRONOMY SCREEN
+// ------------------------
 class AstronomyScreen extends StatefulWidget {
   final String city;
   final String apiKey;
@@ -231,38 +285,46 @@ class _AstronomyScreenState extends State<AstronomyScreen> {
     try {
       final url = "https://api.weatherapi.com/v1/astronomy.json?key=${widget.apiKey}&q=${widget.city}";
       final res = await http.get(Uri.parse(url));
-      final data = json.decode(res.body);
-      astro = data["astronomy"]["astro"];
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        astro = (data["astronomy"]?["astro"] as Map<String, dynamic>?) ?? {};
+      } else {
+        astro = {};
+      }
     } catch (e) {
-      astro = {"sunrise": "6:00 AM", "sunset": "6:30 PM", "moon_phase": "Full Moon"};
+      debugPrint("fetchAstronomy error: $e");
+      astro = {};
     }
     setState(() => isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    const bgUrl = "https://images.unsplash.com/photo-1465101162946-4377e57745c3?auto=format&fit=crop&w=1200&q=80";
+    const bg = 'https://images.unsplash.com/photo-1465101162946-4377e57745c3?auto=format&fit=crop&w=1200&q=80';
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(bgUrl, fit: BoxFit.cover),
+          Image.network(bg, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey)),
           Container(color: Colors.black54),
           if (isLoading)
             const Center(child: CircularProgressIndicator())
           else
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const SizedBox(height: 80),
-                  Text("Astronomy - ${widget.city}", style: const TextStyle(fontSize: 26)),
-                  ListTile(title: const Text("Sunrise"), trailing: Text(astro?["sunrise"] ?? "")),
-                  ListTile(title: const Text("Sunset"), trailing: Text(astro?["sunset"] ?? "")),
-                  ListTile(title: const Text("Moonrise"), trailing: Text(astro?["moonrise"] ?? "")),
-                  ListTile(title: const Text("Moonset"), trailing: Text(astro?["moonset"] ?? "")),
-                  ListTile(title: const Text("Moon Phase"), trailing: Text(astro?["moon_phase"] ?? "")),
-                ],
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Astronomy - ${widget.city}", style: const TextStyle(fontSize: 24, color: Colors.white)),
+                    const SizedBox(height: 18),
+                    ListTile(title: const Text("Sunrise"), trailing: Text(astro?["sunrise"] ?? "N/A")),
+                    ListTile(title: const Text("Sunset"), trailing: Text(astro?["sunset"] ?? "N/A")),
+                    ListTile(title: const Text("Moonrise"), trailing: Text(astro?["moonrise"] ?? "N/A")),
+                    ListTile(title: const Text("Moonset"), trailing: Text(astro?["moonset"] ?? "N/A")),
+                    ListTile(title: const Text("Moon Phase"), trailing: Text(astro?["moon_phase"] ?? "N/A")),
+                  ],
+                ),
               ),
             ),
         ],
@@ -271,81 +333,13 @@ class _AstronomyScreenState extends State<AstronomyScreen> {
   }
 }
 
-class SportsScreen extends StatefulWidget {
-  final String city;
-  final String apiKey;
-  const SportsScreen({super.key, required this.city, required this.apiKey});
-
-  @override
-  State<SportsScreen> createState() => _SportsScreenState();
-}
-
-class _SportsScreenState extends State<SportsScreen> {
-  List<dynamic> matches = [];
-  bool isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    fetchSports();
-  }
-
-  @override
-  void didUpdateWidget(covariant SportsScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.city != widget.city) fetchSports();
-  }
-
-  Future<void> fetchSports() async {
-    try {
-      final url = "https://api.weatherapi.com/v1/sports.json?key=${widget.apiKey}&q=${widget.city}";
-      final res = await http.get(Uri.parse(url));
-      final data = json.decode(res.body);
-      matches = data["cricket"] ?? [];
-    } catch (e) {
-      matches = [
-        {"match": "India vs Australia", "stadium": "Wankhede", "country": "India"},
-        {"match": "England vs SA", "stadium": "Lords", "country": "UK"},
-      ];
-    }
-    setState(() => isLoading = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const bgUrl = "https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=1167&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.network(bgUrl, fit: BoxFit.cover),
-          Container(color: Colors.black54),
-          if (isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (matches.isEmpty)
-            const Center(child: Text("No Cricket Matches Found"))
-          else
-            ListView.builder(
-              itemCount: matches.length,
-              itemBuilder: (ctx, i) {
-                final match = matches[i];
-                return Card(
-                  color: Colors.black45,
-                  margin: const EdgeInsets.all(10),
-                  child: ListTile(
-                    leading: const Icon(Icons.sports_cricket, color: Colors.orange),
-                    title: Text(match["match"]),
-                    subtitle: Text("${match["stadium"]}, ${match["country"]}"),
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
-}
-
+// ------------------------
+// SPORTS SCREEN (Today matches using CricAPI)
+// ------------------------
+class SportsScreen extends StatefulWidget { final String cricketApiKey; const SportsScreen({super.key, required this.cricketApiKey}); @override State<SportsScreen> createState() => _SportsScreenState(); } class _SportsScreenState extends State<SportsScreen> { bool isLoading = true; List<dynamic> matches = []; @override void initState() { super.initState(); fetchTodayMatches(); } Future<void> fetchTodayMatches() async { setState(() => isLoading = true); try { final url = "https://api.cricapi.com/v1/currentMatches?apikey=${widget.cricketApiKey}&offset=0"; final res = await http.get(Uri.parse(url)); if (res.statusCode == 200) { final data = json.decode(res.body); if (data["status"] == "success") { final allMatches = (data["data"] as List<dynamic>?) ?? []; final today = DateTime.now().toIso8601String().substring(0, 10); matches = allMatches.where((m) { final date = (m["date"]?.toString() ?? ""); return date.contains(today); }).toList(); } else { matches = []; } } else { matches = []; } } catch (e) { debugPrint("fetchTodayMatches error: $e"); matches = []; } setState(() => isLoading = false); } String _buildScoreText(dynamic score) { try { if (score == null) return "No Score"; if (score is List && score.isNotEmpty) { final parts = score.map((s) { final team = s["inning"] ?? ""; final runs = s["runs"] ?? 0; final wickets = s["wickets"] ?? 0; final overs = s["overs"] ?? ""; return "$team : $runs/$wickets ($overs)"; }).toList(); return parts.join('\n'); } else if (score is Map) { final runs = score["runs"] ?? 0; final wickets = score["wickets"] ?? 0; final overs = score["overs"] ?? ""; return "$runs/$wickets ($overs)"; } else { return score.toString(); } } catch (e) { return "No Score"; } } @override Widget build(BuildContext context) { const bgUrl = 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=1200&q=80'; return Scaffold( appBar: AppBar(title: const Text("Today's Cricket Matches"), backgroundColor: Colors.black), body: Stack( fit: StackFit.expand, children: [ Image.network(bgUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey)), Container(color: Colors.black54), if (isLoading) const Center(child: CircularProgressIndicator()) else if (matches.isEmpty) const Center(child: Text("No Cricket Matches Found Today", style: TextStyle(color: Colors.white70))) else RefreshIndicator( onRefresh: fetchTodayMatches, child: ListView.builder( padding: const EdgeInsets.all(12), itemCount: matches.length, itemBuilder: (ctx, i) { final match = matches[i]; final title = match["name"] ?? match["series"] ?? "Unknown Match"; final venue = match["venue"] ?? match["stadium"] ?? "Unknown Venue"; final status = match["status"] ?? "Status unknown"; final score = match["score"]; final scoreText = _buildScoreText(score); return Card( color: Colors.grey[900], margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: Padding( padding: const EdgeInsets.all(14), child: Column( crossAxisAlignment: CrossAxisAlignment.start, children: [ Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)), const SizedBox(height: 6), Text(venue, style: TextStyle(color: Colors.grey[400])), const SizedBox(height: 10), Text(scoreText, style: const TextStyle(color: Colors.white)), const SizedBox(height: 10), Text("Status: $status", style: const TextStyle(color: Colors.greenAccent)), ], ), ), ); }, ), ), ], ), ); } }
+// ------------------------
+// MARINE SCREEN
+// ------------------------
 class MarineScreen extends StatefulWidget {
   final String city;
   final String apiKey;
@@ -372,46 +366,55 @@ class _MarineScreenState extends State<MarineScreen> {
   }
 
   Future<void> fetchMarine() async {
+    setState(() => isLoading = true);
     try {
       final url = "https://api.weatherapi.com/v1/marine.json?key=${widget.apiKey}&q=${widget.city}";
       final res = await http.get(Uri.parse(url));
-      final data = json.decode(res.body);
-      marineData = data["forecast"]["forecastday"][0]["day"];
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final list = data["forecast"]?["forecastday"] as List<dynamic>?;
+        if (list != null && list.isNotEmpty) {
+          marineData = list[0]["day"] as Map<String, dynamic>?;
+        } else {
+          marineData = null;
+        }
+      } else {
+        marineData = null;
+      }
     } catch (e) {
-      marineData = {
-        "maxtemp_c": 30,
-        "mintemp_c": 24,
-        "avgtemp_c": 27,
-        "maxwind_kph": 22,
-        "avgvis_km": 8,
-        "daily_chance_of_rain": 20
-      };
+      debugPrint("fetchMarine error: $e");
+      marineData = null;
     }
     setState(() => isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    const bgUrl = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80";
+    const bg = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80';
     return Scaffold(
+      appBar: AppBar(title: const Text("Marine"), backgroundColor: Colors.black),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(bgUrl, fit: BoxFit.cover),
+          Image.network(bg, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey)),
           Container(color: Colors.black54),
           if (isLoading)
             const Center(child: CircularProgressIndicator())
+          else if (marineData == null)
+            const Center(child: Text("Marine data not available", style: TextStyle(color: Colors.white70)))
           else
-            ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                ListTile(title: const Text("Max Temp"), trailing: Text("${marineData!["maxtemp_c"]} °C")),
-                ListTile(title: const Text("Min Temp"), trailing: Text("${marineData!["mintemp_c"]} °C")),
-                ListTile(title: const Text("Average Temp"), trailing: Text("${marineData!["avgtemp_c"]} °C")),
-                ListTile(title: const Text("Max Wind"), trailing: Text("${marineData!["maxwind_kph"]} km/h")),
-                ListTile(title: const Text("Visibility"), trailing: Text("${marineData!["avgvis_km"]} km")),
-                ListTile(title: const Text("Chance of Rain"), trailing: Text("${marineData!["daily_chance_of_rain"]}%")),
-              ],
+            SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  ListTile(title: const Text("Max Temp"), trailing: Text("${marineData?["maxtemp_c"] ?? 'N/A'} °C")),
+                  ListTile(title: const Text("Min Temp"), trailing: Text("${marineData?["mintemp_c"] ?? 'N/A'} °C")),
+                  ListTile(title: const Text("Avg Temp"), trailing: Text("${marineData?["avgtemp_c"] ?? 'N/A'} °C")),
+                  ListTile(title: const Text("Max Wind"), trailing: Text("${marineData?["maxwind_kph"] ?? 'N/A'} km/h")),
+                  ListTile(title: const Text("Visibility"), trailing: Text("${marineData?["avgvis_km"] ?? 'N/A'} km")),
+                  ListTile(title: const Text("Chance of Rain"), trailing: Text("${marineData?["daily_chance_of_rain"] ?? 'N/A'} %")),
+                ],
+              ),
             ),
         ],
       ),
